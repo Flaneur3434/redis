@@ -20,11 +20,14 @@ if(NOT EXISTS ${BUILD_DIR})
 endif()
 
 # Create the executable
-add_executable(redis main.cpp)
+add_executable(server server.cpp)
+add_executable(client client.cpp)
 
 # Set the output directory for the executable
-set_target_properties(redis PROPERTIES
+set_target_properties(server client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${BUILD_DIR})
 
 # Compiler flags for this target
-target_compile_options(redis PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move)
+target_compile_options(server PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move)
+
+target_compile_options(client PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move)
