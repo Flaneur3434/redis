@@ -6,8 +6,15 @@
 #include <iostream>
 #include <string>
 #include <concepts>
+#include <fcntl.h>
 
 const size_t k_max_msg = 4096;
+
+// Enables using unique_ptr with legacy malloc
+struct free_delete
+{
+	void operator()(void* x) { free(x); }
+};
 
 void die(const char *msg) {
 	int err = errno;
@@ -52,4 +59,21 @@ int32_t write_all(int fd, const char *buf, size_t n) {
 		buf += rv;
 	}
 	return 0;
+}
+
+void fd_set_nb(int fd) {
+	errno = 0;
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (errno) {
+		die("fcntl error");
+		return;
+	}
+
+	 flags |= O_NONBLOCK;
+
+	 errno = 0;
+	 (void)fcntl(fd, F_SETFL, flags);
+	 if (errno) {
+		 die("fcntl error");
+	 }
 }
