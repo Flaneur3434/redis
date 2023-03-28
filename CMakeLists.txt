@@ -5,8 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_COMPILER_LAUNCHER "/usr/bin/ccache")
 set(CMAKE_CXX_COMPILER "/usr/bin/g++")
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
-
+# set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Export the compilation commands to a file
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -19,6 +18,9 @@ if(NOT EXISTS ${BUILD_DIR})
     file(MAKE_DIRECTORY ${BUILD_DIR})
 endif()
 
+# Add options to the compilation of source files
+add_compile_options(-std=c++20 -Wall -Wextra -Weffc++ -Wpedantic -Wconversion -Wshadow -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move -Wcast-qual -Wduplicated-branches -Wduplicated-cond -Wfloat-equal -Wuninitialized -Winit-self -Wlogical-op -Wpadded -Wswitch-default -Wswitch-enum -Wundef -Wwrite-strings -Wdangling-else -Wunreachable-code)
+
 # Create the executable
 add_executable(server server.cpp)
 add_executable(client client.cpp)
@@ -26,8 +28,3 @@ add_executable(client client.cpp)
 # Set the output directory for the executable
 set_target_properties(server client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${BUILD_DIR})
-
-# Compiler flags for this target
-target_compile_options(server PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move)
-
-target_compile_options(client PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move)

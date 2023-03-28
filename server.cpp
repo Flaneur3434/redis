@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -12,8 +12,9 @@
 
 #include "util.hpp"
 #include "server.hpp"
+#include "hashtable.hpp"
 
-static void conn_put(std::vector<std::unique_ptr<Conn>> &fd2conn, auto&& conn) {
+static void conn_put(std::vector<std::unique_ptr<Conn>> &fd2conn, auto&& conn) noexcept {
 	if (fd2conn.size() <= (size_t)conn->fd) {
 		fd2conn.resize(conn->fd + 1);
 	}
@@ -21,7 +22,7 @@ static void conn_put(std::vector<std::unique_ptr<Conn>> &fd2conn, auto&& conn) {
 	fd2conn[conn->fd] = std::move(conn);
 }
 
-static int32_t accept_new_conn(std::vector<std::unique_ptr<Conn>> &fd2conn, int fd) {
+static int32_t accept_new_conn(std::vector<std::unique_ptr<Conn>> &fd2conn, int fd) noexcept {
 	// accept
 	struct sockaddr_in client_addr = {};
 	socklen_t socklen = sizeof(client_addr);
@@ -47,12 +48,12 @@ static int32_t accept_new_conn(std::vector<std::unique_ptr<Conn>> &fd2conn, int 
 	return 0;
 }
 
-static bool try_flush_buffer(const std::unique_ptr<Conn>& conn) {
+static bool try_flush_buffer(const std::unique_ptr<Conn>& conn) noexcept {
 	ssize_t rv = 0;
 	do {
 		size_t remain = conn->wbuf_size - conn->wbuf_sent;
 		rv = write(conn->fd, &conn->wbuf[conn->wbuf_sent], remain);
-	} while (rv < 0 && errno == EINTR);
+	} while (rv > 0 && errno == EINTR);
 
 	if (rv < 0 && errno == EAGAIN) {
 		// got EAGAIN, stop.
@@ -80,13 +81,124 @@ static bool try_flush_buffer(const std::unique_ptr<Conn>& conn) {
 	return true;
 }
 
-static void state_res(const std::unique_ptr<Conn>& conn) {
+static void state_res(const std::unique_ptr<Conn>& conn) noexcept {
 	while (try_flush_buffer(conn)) {
 		;
 	}
 }
 
-static bool try_one_request(const std::unique_ptr<Conn>& conn) {
+static uint32_t do_get(
+    const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen) noexcept {
+	if (!g_map.count(cmd[1])) {
+		return RES_NX;
+	}
+
+	std::string &val = g_map[cmd[1]];
+	assert_p("Check to see if requested data is correct length", val.size() <= k_max_msg);
+	memcpy(res, val.data(), val.size());
+	*reslen = (uint32_t)val.size();
+	return RES_OK;
+}
+
+static uint32_t do_set(
+    const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen) noexcept {
+	(void)res;
+	(void)reslen;
+	g_map[cmd[1]] = cmd[2];
+	return RES_OK;
+}
+
+static uint32_t do_del(
+    const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen) noexcept {
+	(void)res;
+	(void)reslen;
+	g_map.erase(cmd[1]);
+	return RES_OK;
+}
+
+
+static inline bool cmd_is(const std::string &word, const std::string &cmd) noexcept {
+	return word == cmd;
+}
+
+static int32_t parse_req(
+    const uint8_t *data,
+    size_t data_len,
+    std::vector<std::string>& out
+) noexcept {
+	/*
+	 * +------+-----+------+-----+------+-----+-----+------+
+	 * | nstr | len | str1 | len | str2 | ... | len | strn |
+	 * +------+-----+------+-----+------+-----+-----+------+
+	 */
+
+	if (data_len < 4) {
+		return -1;
+	}
+
+	uint32_t nstr = 0;
+	memcpy(&nstr, &data[0], 4);
+	if (nstr > k_max_msg) {
+		return -1;
+	}
+
+	size_t pos = 4;
+	while (nstr--) {
+		if (pos + 4 > data_len) {
+			return -1;
+		}
+
+		uint32_t len = 0;
+		memcpy(&len, &data[pos], 4);
+		if (pos + 4 + len > data_len) {
+			return -1;
+		}
+
+		out.push_back(std::string((char *)&data[pos + 4], len));
+		pos += 4 + len;
+	}
+
+	if (pos != data_len) {
+		return -1;  // trailing garbage
+	}
+
+	return 0;
+}
+
+static int32_t do_request(
+    const uint8_t* req,
+    uint32_t reqlen,
+    uint32_t *rescode,
+    uint8_t *res,
+    uint32_t *reslen
+) noexcept {
+	std::vector<std::string> cmd;
+	if (parse_req(req, reqlen, cmd) != 0) {
+		msg("bad req");
+		return -1;
+	}
+
+	if (cmd.size() == 2 && cmd_is(cmd[0], "get")) {
+		*rescode = do_get(cmd, res, reslen);
+	}
+	else if (cmd.size() == 3 && cmd_is(cmd[0], "set")) {
+		*rescode = do_set(cmd, res, reslen);
+	} else if (cmd.size() == 2 && cmd_is(cmd[0], "del")) {
+		*rescode = do_del(cmd, res, reslen);
+	} else {
+		// cmd is not recognized
+		*rescode = RES_ERR;
+		const char *msg = "Unknown cmd";
+		strcpy((char *)res, msg);
+		*reslen = strlen(msg);
+		return 0;
+	}
+	return 0;
+}
+
+
+
+static bool try_one_request(const std::unique_ptr<Conn>& conn) noexcept {
 	// try to parse a request from the buffer
 	if (conn->rbuf_size < 4) {
 		// not enough data in the buffer. Will retry in the next iteration
@@ -94,8 +206,7 @@ static bool try_one_request(const std::unique_ptr<Conn>& conn) {
 	}
 
 	uint32_t len = 0;
-	// memcpy(&len, &conn->rbuf_head[0], 4);
-	memcpy(&len, &conn->rbuf[0], 4);
+	memcpy(&len, &conn->rbuf_head[0], 4);
 	if (len > k_max_msg) {
 		msg("too long");
 		conn->state = STATE_END;
@@ -108,21 +219,27 @@ static bool try_one_request(const std::unique_ptr<Conn>& conn) {
 		return false;
 	}
 
-	// got one request, do something with it
-	printf("client says: %.*s\n", len, &conn->rbuf[4]);
-	// printf("client says: %.*s\n", len, &conn->rbuf_head[4]);
+	// got one request, generate the response
+	uint32_t rescode = 0;
+	uint32_t wlen = 0;
+	int32_t err =
+	    do_request(&conn->rbuf_head[4], len, &rescode, &conn->wbuf[4 + 4], &wlen);
+
+	if (err) {
+		conn->state = STATE_END;
+		return false;
+	}
 
 	// generating echoing response
-	memcpy(&conn->wbuf[0], &len, 4);
-	// memcpy(&conn->wbuf[4], &conn->rbuf_head[4], len);
-	memcpy(&conn->wbuf[4], &conn->rbuf[4], len);
-	conn->wbuf_size = 4 + len;
+	wlen += 4;
+	memcpy(&conn->wbuf[0], &wlen, 4);
+	memcpy(&conn->wbuf[4], &rescode, 4);
+	conn->wbuf_size = 4 + wlen;
 
 	// remove the request from the buffer.
 	size_t remain = conn->rbuf_size - 4 - len;
 	if (remain) {
-		// conn->rbuf_head = &conn->rbuf[4 + len];
-		memmove(conn->rbuf, &conn->rbuf[4 + len], remain);
+		conn->rbuf_head = &conn->rbuf[4 + len];
 	}
 	conn->rbuf_size = remain;
 
@@ -134,7 +251,7 @@ static bool try_one_request(const std::unique_ptr<Conn>& conn) {
 	return (conn->state == STATE_REQ);
 }
 
-static bool try_fill_buffer(const std::unique_ptr<Conn>& conn) {
+static bool try_fill_buffer(const std::unique_ptr<Conn>& conn) noexcept {
 	// try to fill the buffer
 	assert_p("check if buffer is large enough for writing", conn->rbuf_size < conn->rbuf_cap);
 	ssize_t rv = 0;
@@ -176,13 +293,13 @@ static bool try_fill_buffer(const std::unique_ptr<Conn>& conn) {
 	return (conn->state == STATE_REQ);
 }
 
-static void state_req(const std::unique_ptr<Conn>& conn) {
+static void state_req(const std::unique_ptr<Conn>& conn) noexcept {
 	while (try_fill_buffer(conn)) {
 		;
 	}
 }
 
-static void connection_io(const std::unique_ptr<Conn>& conn) {
+static void connection_io(const std::unique_ptr<Conn>& conn) noexcept {
 	switch (conn->state) {
 	case STATE_REQ:
 		state_req(conn);
