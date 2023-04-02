@@ -28,7 +28,9 @@ if(NOT EXISTS ${BUILD_DIR})
 endif()
 
 # Add options to the compilation of source files
-add_compile_options(-std=c++20 -Wall -Wextra -Weffc++ -Wpedantic -Wconversion -Wshadow -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move -Wcast-qual -Wduplicated-branches -Wduplicated-cond -Wfloat-equal -Wuninitialized -Winit-self -Wlogical-op -Wpadded -Wswitch-default -Wswitch-enum -Wundef -Wwrite-strings -Wdangling-else -Wunreachable-code)
+# this version has too many useless warnings ;-;
+# add_compile_options(-std=c++20 -Wall -Wextra -Weffc++ -Wpedantic -Wconversion -Wshadow -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move -Wcast-qual -Wduplicated-branches -Wduplicated-cond -Wfloat-equal -Wuninitialized -Winit-self -Wlogical-op -Wpadded -Wswitch-default -Wswitch-enum -Wundef -Wwrite-strings -Wdangling-else -Wunreachable-code)
+add_compile_options(-std=c++20 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnull-dereference -Wuninitialized -Wuninitialized -Wstrict-aliasing -Wpessimizing-move -Wredundant-move -Wcast-qual -Wduplicated-branches -Wduplicated-cond -Wfloat-equal -Wuninitialized -Winit-self -Wlogical-op -Wswitch-default -Wswitch-enum -Wundef -Wwrite-strings -Wdangling-else -Wunreachable-code)
 
 # build class files
 add_library(util STATIC util.cpp)

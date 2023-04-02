@@ -3,6 +3,7 @@
 #include <memory>
 #include <cstdlib>
 #include <functional>
+#include <optional>
 
 #include "util.hpp"
 
@@ -10,12 +11,15 @@
 template <class T>
 class HNode {
 public:
-	HNode (T&& data, HNode<T> *next, uint64_t hcode) : data(data), next(next), hcode(hcode)  {}
+	HNode(T&& data, HNode<T> *next, uint64_t hcode) : data(data), next(next), hcode(hcode)  {}
+	HNode() = default;
 	~HNode() = default;
 
 	// move constructor
 	HNode(HNode<T>&& other) = default;
-	HNode(const HNode<T>& other) = default;
+	HNode(const HNode<T>& other) noexcept : next(other.next), hcode(other.hcode) {
+		this->data = other.data;
+	};
 	HNode& operator= (const HNode<T>& other) = default;
 
 	T data;
@@ -34,9 +38,7 @@ public:
 		mask = n - 1;
 	}
 
-	HashTable() noexcept : mask(0), size(0) {
-		table = nullptr;
-	}
+	HashTable() noexcept : mask(0), size(0), table(nullptr) {}
 
 	~HashTable() noexcept {
 		(void)table.release();
@@ -112,7 +114,7 @@ public:
 
 	// !! make move & copy constructors
 
-	HNode<T> lookup(const HNode<T>& key, std::function<bool (const HNode<T>&, const HNode<T>&)> cmp) noexcept;
+	const HNode<T> *lookup(const HNode<T>& key, std::function<bool (const HNode<T>&, const HNode<T>&)> cmp) noexcept;
 	void insert(HNode<T>&& node) noexcept;
 	HNode<T> pop(const HNode<T>& key, std::function<bool (const HNode<T>&, const HNode<T>&)> cmp) noexcept;
 	void help_resize() noexcept;
@@ -127,14 +129,22 @@ public:
 };
 
 template <class T>
-HNode<T> HashMap<T>::lookup(const HNode<T>& key, std::function<bool (const HNode<T>&, const HNode<T>&)> cmp) noexcept {
+const HNode<T> *
+HashMap<T>::lookup(const HNode<T>& key, std::function<bool (const HNode<T>&, const HNode<T>&)> cmp) noexcept {
 	help_resize();
 	HNode<T> **from = this->ht1->lookup(key, cmp);
 	if (from == nullptr) {
 		from = this->ht2->lookup(key, cmp);
 	}
 
-	return from ? **from : HNode<T>{};
+	if (from != nullptr) {
+		// cast to const for safety, dont want end user to modify underlying node
+		// need to create temp variable because of lifetimes ...
+		auto ret_node = const_cast<HNode<T> *>(*from);
+		return ret_node;
+	} else {
+		return nullptr;
+	}
 }
 
 template <class T>

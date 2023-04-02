@@ -15,5 +15,18 @@ int main() {
 	});
 	assert_p("check if popped node is expected", popped_node.data == 5);
 
+	/* lookup test*/
+	HashMap<std::string> hm2 {};
+	HNode<std::string> node2 ("cat", nullptr, 1);
+	hm2.insert(std::move(node2));
+	auto lookup_node = hm2.lookup({"cat", nullptr, 1},
+	    [](const HNode<std::string>& n1, const HNode<std::string>& n2){
+		    return n1.data == n2.data;
+	});
+
+	assert_p("check if lookup node is expected node",
+	    lookup_node != nullptr && lookup_node->data == node2.data
+	);
+
 	return 0;
 }
