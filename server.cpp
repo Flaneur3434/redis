@@ -12,7 +12,7 @@
 
 #include "util.hpp"
 #include "server.hpp"
-#include "hashtable.hpp"
+#include "hashmap.hpp"
 
 static void conn_put(std::vector<std::unique_ptr<Conn>> &fd2conn, auto&& conn) noexcept {
 	if (fd2conn.size() <= (size_t)conn->fd) {
